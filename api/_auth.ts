@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 
 export function getSupabaseAdmin() {
-  const url = process.env.SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const url = process.env.SUPABASE_URL?.trim()
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
   if (!url || !key) {
     throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
   }
@@ -14,7 +14,7 @@ export function getSupabaseAdmin() {
 }
 
 export function hashPassword(password: string): string {
-  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || 'novara-secret'
+  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || 'novara-secret'
   return crypto.createHmac('sha256', secret).update(password).digest('hex')
 }
 
@@ -33,8 +33,8 @@ export async function getAdminCredentials() {
     }
   }
 
-  const defaultUsername = process.env.ADMIN_USERNAME || 'admin'
-  const defaultPassword = process.env.ADMIN_PASSWORD || ''
+  const defaultUsername = (process.env.ADMIN_USERNAME || 'admin').trim()
+  const defaultPassword = (process.env.ADMIN_PASSWORD || '').trim()
   const defaultHash = hashPassword(defaultPassword)
 
   await supabase.from('admin_credentials').upsert({
@@ -51,7 +51,7 @@ export async function getAdminCredentials() {
 }
 
 export function createSessionToken(username: string, passwordHash: string): string {
-  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || 'novara-secret'
+  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || 'novara-secret'
   const payload = Buffer.from(JSON.stringify({ u: username, t: Date.now() })).toString('base64url')
   const sig = crypto.createHmac('sha256', `${secret}:${passwordHash}`).update(payload).digest('base64url')
   return `${payload}.${sig}`
@@ -71,7 +71,7 @@ export async function verifySession(req: VercelRequest): Promise<{ valid: boolea
   const [payload, sig] = token.split('.')
   try {
     const creds = await getAdminCredentials()
-    const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || 'novara-secret'
+    const secret = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || 'novara-secret'
     const expectedSig = crypto.createHmac('sha256', `${secret}:${creds.passwordHash}`).update(payload).digest('base64url')
 
     if (sig !== expectedSig) {

@@ -20,6 +20,7 @@ export default function App() {
   const [authenticated, setAuthenticated] = useState<boolean>(false)
   const [checkingAuth, setCheckingAuth] = useState<boolean>(true)
   const [currentUsername, setCurrentUsername] = useState<string>('admin')
+  const [activeTab, setActiveTab] = useState<'stats' | 'settings'>('stats')
 
   const [loginUsername, setLoginUsername] = useState<string>('')
   const [loginPassword, setLoginPassword] = useState<string>('')
@@ -35,13 +36,17 @@ export default function App() {
   const [sortDir, setSortDir] = useState<SortDirection>('desc')
   const [selectedRow, setSelectedRow] = useState<ProfileStat | null>(null)
 
-  const [showSettings, setShowSettings] = useState<boolean>(false)
   const [settingsCurrentPassword, setSettingsCurrentPassword] = useState<string>('')
   const [settingsNewUsername, setSettingsNewUsername] = useState<string>('')
   const [settingsNewPassword, setSettingsNewPassword] = useState<string>('')
   const [settingsMessage, setSettingsMessage] = useState<string>('')
   const [settingsError, setSettingsError] = useState<string>('')
   const [settingsSaving, setSettingsSaving] = useState<boolean>(false)
+
+  const [confirmClearText, setConfirmClearText] = useState<string>('')
+  const [clearingData, setClearingData] = useState<boolean>(false)
+  const [clearMessage, setClearMessage] = useState<string>('')
+  const [clearError, setClearError] = useState<string>('')
 
   const getHeaders = (customToken?: string | null) => {
     const activeToken = customToken !== undefined ? customToken : token
@@ -130,6 +135,7 @@ export default function App() {
     setToken(null)
     setAuthenticated(false)
     setRows([])
+    setActiveTab('stats')
   }
 
   const handleExportCsv = async () => {
@@ -184,12 +190,51 @@ export default function App() {
       }
       setSettingsCurrentPassword('')
       setSettingsNewPassword('')
-      setSettingsMessage('Credentials updated.')
+      setSettingsMessage('Credentials updated successfully!')
     } catch (err: any) {
       setSettingsError(err.message || 'Update failed')
     } finally {
       setSettingsSaving(false)
     }
+  }
+
+  const handleClearAllData = async () => {
+    if (confirmClearText !== 'CONFIRM') return
+    setClearingData(true)
+    setClearError('')
+    setClearMessage('')
+    try {
+      const res = await fetch('/api/stats', {
+        method: 'DELETE',
+        headers: getHeaders(),
+        credentials: 'include',
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to clear data')
+      }
+      setRows([])
+      setConfirmClearText('')
+      setClearMessage('All profile stats data has been cleared.')
+    } catch (err: any) {
+      setClearError(err.message || 'Error clearing data')
+    } finally {
+      setClearingData(false)
+    }
+  }
+
+  const handleDeleteSingleRow = async (id: number) => {
+    try {
+      const res = await fetch(`/api/stats?id=${id}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+        credentials: 'include',
+      })
+      if (res.ok) {
+        setRows((prev) => prev.filter((r) => r.id !== id))
+        setSelectedRow(null)
+      }
+    } catch {}
   }
 
   const handleSort = (col: SortColumn) => {
@@ -230,54 +275,67 @@ export default function App() {
   const formatValue = (col: SortColumn, value: unknown) => {
     if (value === null || value === undefined || value === '') return '-'
     if (col === 'accuracy' && typeof value === 'number') {
-      return Number.isInteger(value) ? String(value) : value.toFixed(2)
+      return `${Number.isInteger(value) ? String(value) : value.toFixed(2)}%`
     }
     return String(value)
   }
 
   if (checkingAuth) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600 text-sm">
-        Loading...
+      <div className="min-h-screen flex items-center justify-center bg-gray-950 text-gray-400 text-sm">
+        Loading portal...
       </div>
     )
   }
 
   if (!authenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-        <div className="w-full max-w-sm bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-          <h1 className="text-lg font-semibold text-slate-900 mb-1">NOVARA Admin</h1>
-          <p className="text-xs text-slate-500 mb-5">Sign in to view profile stats uploads</p>
-          <form onSubmit={handleLogin} className="space-y-4">
+      <div className="min-h-screen bg-gray-950 flex flex-col justify-center px-4 relative overflow-hidden">
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-purple-900/20 rounded-full blur-3xl"></div>
+          <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-blue-900/10 rounded-full blur-3xl"></div>
+        </div>
+        <div className="relative z-10 max-w-md w-full mx-auto p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 text-center">
+          <h2 className="text-3xl font-extrabold text-white mb-2">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
+              NOVARA
+            </span>{' '}
+            Admin
+          </h2>
+          <p className="text-gray-400 mb-8 text-sm">Login to manage NOVARA profile stats</p>
+          <form onSubmit={handleLogin} className="space-y-4 text-left">
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">Username</label>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Username</label>
               <input
                 type="text"
+                placeholder="Username"
                 value={loginUsername}
                 onChange={(e) => setLoginUsername(e.target.value)}
-                placeholder="admin"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">Password</label>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Password</label>
               <input
                 type="password"
+                placeholder="Password"
                 required
                 value={loginPassword}
                 onChange={(e) => setLoginPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
             </div>
-            {loginError && <p className="text-xs text-red-600">{loginError}</p>}
+            {loginError && (
+              <p className="text-xs text-red-400 bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2">
+                {loginError}
+              </p>
+            )}
             <button
               type="submit"
               disabled={loginLoading}
-              className="w-full rounded-lg bg-slate-900 text-white py-2 text-sm font-medium hover:bg-slate-800 disabled:opacity-50"
+              className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold py-3 rounded-lg transition-colors mt-4 shadow-lg shadow-purple-500/20"
             >
-              {loginLoading ? 'Signing in...' : 'Sign In'}
+              {loginLoading ? 'Signing in...' : 'Access Dashboard'}
             </button>
           </form>
         </div>
@@ -286,219 +344,314 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <h1 className="text-base font-semibold tracking-tight">NOVARA Profile Stats</h1>
-            <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
-              Total: {filteredAndSortedRows.length}
-              {filteredAndSortedRows.length !== rows.length ? ` / ${rows.length}` : ''}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => fetchStats()}
-              disabled={loadingStats}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-            >
-              {loadingStats ? 'Refreshing...' : 'Refresh'}
-            </button>
-            <button
-              onClick={handleExportCsv}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Export CSV
-            </button>
-            <button
-              onClick={() => {
-                setSettingsError('')
-                setSettingsMessage('')
-                setSettingsNewUsername(currentUsername)
-                setShowSettings(true)
-              }}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Settings
-            </button>
-            <button
-              onClick={handleLogout}
-              className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
-            >
-              Logout
-            </button>
+    <div className="min-h-screen bg-gray-950 text-gray-100">
+      <nav className="bg-gray-900 border-b border-gray-800 text-white sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16 items-center gap-4">
+            <div className="flex items-center space-x-3 shrink-0">
+              <span className="text-xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
+                NOVARA Admin
+              </span>
+              <span className="bg-purple-600/20 border border-purple-500/40 text-purple-300 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                {filteredAndSortedRows.length}
+                {filteredAndSortedRows.length !== rows.length ? ` / ${rows.length}` : ''} records
+              </span>
+            </div>
+
+            <div className="flex items-center space-x-2 overflow-x-auto py-2">
+              <button
+                onClick={() => setActiveTab('stats')}
+                className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors shrink-0 ${
+                  activeTab === 'stats'
+                    ? 'bg-gray-800 text-purple-400'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Profile Stats
+              </button>
+              <button
+                onClick={() => {
+                  setSettingsError('')
+                  setSettingsMessage('')
+                  setClearError('')
+                  setClearMessage('')
+                  setSettingsNewUsername(currentUsername)
+                  setActiveTab('settings')
+                }}
+                className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors shrink-0 ${
+                  activeTab === 'settings'
+                    ? 'bg-gray-800 text-purple-400'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Settings
+              </button>
+              <div className="pl-3 ml-2 border-l border-gray-700 shrink-0">
+                <button
+                  onClick={handleLogout}
+                  className="text-sm font-medium text-red-400 hover:text-red-300 transition-colors px-2 py-1"
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      </header>
+      </nav>
 
-      <main className="max-w-7xl mx-auto px-4 py-4 space-y-4">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by playerName or deviceId..."
-            className="w-full sm:max-w-xs rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
-          />
-          {statsError && <p className="text-xs text-red-600">{statsError}</p>}
-        </div>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {activeTab === 'stats' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-extrabold text-white">Profile Stats Uploads</h1>
+                <p className="text-sm text-gray-400">
+                  Live player telemetry uploaded from the NOVARA Unity client
+                </p>
+              </div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <button
+                  onClick={() => fetchStats()}
+                  disabled={loadingStats}
+                  className="bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {loadingStats ? 'Refreshing...' : 'Refresh'}
+                </button>
+                <button
+                  onClick={handleExportCsv}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-lg shadow-purple-500/20"
+                >
+                  Export CSV
+                </button>
+              </div>
+            </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-slate-600">
-                  {COLUMNS.map((col) => (
-                    <th
-                      key={col.key}
-                      onClick={() => handleSort(col.key)}
-                      className="py-2.5 px-3 font-semibold whitespace-nowrap cursor-pointer select-none hover:bg-slate-100"
-                    >
-                      <span className="inline-flex items-center gap-1">
-                        {col.label}
-                        {sortCol === col.key && (
-                          <span>{sortDir === 'asc' ? '▲' : '▼'}</span>
-                        )}
-                      </span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredAndSortedRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={COLUMNS.length} className="py-8 text-center text-slate-400">
-                      {loadingStats ? 'Loading records...' : 'No records found'}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredAndSortedRows.map((row) => (
-                    <tr
-                      key={row.id}
-                      onClick={() => setSelectedRow(row)}
-                      className="hover:bg-slate-50 cursor-pointer"
-                    >
+            <div className="bg-gray-800 p-5 rounded-xl border border-gray-700 shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by playerName or deviceId..."
+                  className="w-full sm:max-w-sm bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <div className="text-xs text-gray-400">
+                  Showing <span className="text-white font-semibold">{filteredAndSortedRows.length}</span> of{' '}
+                  <span className="text-white font-semibold">{rows.length}</span> total rows
+                </div>
+              </div>
+
+              {statsError && (
+                <div className="text-xs text-red-400 bg-red-950/40 border border-red-900/50 rounded-lg px-4 py-3">
+                  {statsError}
+                </div>
+              )}
+
+              <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-900">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-800 bg-gray-900/80 text-gray-400">
                       {COLUMNS.map((col) => (
-                        <td key={col.key} className="py-2.5 px-3 whitespace-nowrap text-slate-700">
-                          {formatValue(col.key, row[col.key])}
-                        </td>
+                        <th
+                          key={col.key}
+                          onClick={() => handleSort(col.key)}
+                          className="py-3 px-3.5 font-semibold whitespace-nowrap cursor-pointer select-none hover:bg-gray-800 hover:text-purple-400 transition-colors"
+                        >
+                          <span className="inline-flex items-center gap-1.5">
+                            {col.label}
+                            {sortCol === col.key && (
+                              <span className="text-purple-400">{sortDir === 'asc' ? '▲' : '▼'}</span>
+                            )}
+                          </span>
+                        </th>
                       ))}
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-800">
+                    {filteredAndSortedRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={COLUMNS.length} className="py-12 text-center text-gray-500 text-sm">
+                          {loadingStats ? 'Loading records...' : 'No profile stats found'}
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredAndSortedRows.map((row) => (
+                        <tr
+                          key={row.id}
+                          onClick={() => setSelectedRow(row)}
+                          className="hover:bg-gray-800/70 cursor-pointer transition-colors"
+                        >
+                          {COLUMNS.map((col) => (
+                            <td key={col.key} className="py-3 px-3.5 whitespace-nowrap text-gray-200">
+                              {col.key === 'masteryRank' && row.masteryRank ? (
+                                <span className="bg-purple-600/20 border border-purple-500/40 text-purple-300 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                                  {row.masteryRank}
+                                </span>
+                              ) : col.key === 'correctAnswers' ? (
+                                <span className="text-emerald-400 font-medium">
+                                  {formatValue(col.key, row[col.key])}
+                                </span>
+                              ) : col.key === 'wrongAnswers' ? (
+                                <span className="text-rose-400 font-medium">
+                                  {formatValue(col.key, row[col.key])}
+                                </span>
+                              ) : (
+                                formatValue(col.key, row[col.key])
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
+
+        {activeTab === 'settings' && (
+          <div className="max-w-2xl mx-auto space-y-8">
+            <h1 className="text-2xl font-extrabold text-white text-center">Admin Settings</h1>
+
+            <div className="bg-gray-800 p-8 rounded-xl border border-gray-700 shadow-xl">
+              <h2 className="text-xl font-bold text-white mb-2">Update Credentials</h2>
+              <p className="text-gray-400 text-sm mb-6">
+                Change your admin portal login username and password here.
+              </p>
+
+              <form onSubmit={handleSaveSettings} className="space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">New Username</label>
+                  <input
+                    type="text"
+                    required
+                    value={settingsNewUsername}
+                    onChange={(e) => setSettingsNewUsername(e.target.value)}
+                    placeholder="Enter new username"
+                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">
+                    New Password (leave blank to keep current)
+                  </label>
+                  <input
+                    type="password"
+                    value={settingsNewPassword}
+                    onChange={(e) => setSettingsNewPassword(e.target.value)}
+                    placeholder="Enter new password"
+                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">
+                    Current Password (required to confirm)
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={settingsCurrentPassword}
+                    onChange={(e) => setSettingsCurrentPassword(e.target.value)}
+                    placeholder="Enter current password"
+                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                {settingsError && (
+                  <p className="text-xs text-red-400 bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2">
+                    {settingsError}
+                  </p>
+                )}
+                {settingsMessage && (
+                  <p className="text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-900/50 rounded-lg px-3 py-2">
+                    {settingsMessage}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={settingsSaving}
+                  className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold py-3 rounded-lg transition-colors mt-4 shadow-lg shadow-purple-500/20"
+                >
+                  {settingsSaving ? 'Saving...' : 'Save New Credentials'}
+                </button>
+              </form>
+            </div>
+
+            <div className="bg-red-950/30 p-8 rounded-xl border border-red-900/50 shadow-xl">
+              <h2 className="text-xl font-bold text-red-500 mb-2">Danger Zone</h2>
+              <p className="text-red-400/70 text-sm mb-6">
+                Permanently delete all uploaded rows in <code className="text-red-300">profile_stats</code> (useful for cleaning out test data). Type <span className="font-bold text-red-300">CONFIRM</span> below to unlock.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <input
+                  type="text"
+                  value={confirmClearText}
+                  onChange={(e) => setConfirmClearText(e.target.value)}
+                  placeholder="Type CONFIRM to enable"
+                  className="flex-1 bg-gray-900 border border-red-900/60 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
+                <button
+                  type="button"
+                  disabled={confirmClearText !== 'CONFIRM' || clearingData}
+                  onClick={handleClearAllData}
+                  className="bg-red-600 hover:bg-red-700 disabled:bg-gray-800 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg transition-colors shrink-0"
+                >
+                  {clearingData ? 'Clearing...' : `Clear All Data (${rows.length})`}
+                </button>
+              </div>
+
+              {clearError && <p className="text-xs text-red-400 mt-3">{clearError}</p>}
+              {clearMessage && <p className="text-xs text-emerald-400 mt-3">{clearMessage}</p>}
+            </div>
+          </div>
+        )}
       </main>
 
       {selectedRow && (
         <div
-          className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
           onClick={() => setSelectedRow(null)}
         >
           <div
-            className="w-full max-w-md bg-white rounded-xl border border-slate-200 shadow-lg p-5 max-h-[90vh] overflow-y-auto"
+            className="w-full max-w-md bg-gray-800 rounded-xl border border-gray-700 shadow-2xl p-6 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h2 className="text-sm font-semibold">Record Details (#{selectedRow.id})</h2>
+            <div className="flex items-center justify-between pb-3 border-b border-gray-700">
+              <h2 className="text-base font-bold text-white">Record Details (#{selectedRow.id})</h2>
               <button
                 onClick={() => setSelectedRow(null)}
-                className="text-xs text-slate-500 hover:text-slate-800"
+                className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded bg-gray-900 border border-gray-700"
               >
                 Close
               </button>
             </div>
-            <dl className="mt-3 divide-y divide-slate-100 text-xs">
+            <dl className="mt-3 divide-y divide-gray-700/60 text-xs">
               {COLUMNS.map((col) => (
-                <div key={col.key} className="py-2 flex justify-between gap-4">
-                  <dt className="font-medium text-slate-500">{col.label}</dt>
-                  <dd className="text-slate-900 break-all text-right">
+                <div key={col.key} className="py-2.5 flex justify-between gap-4">
+                  <dt className="font-medium text-gray-400">{col.label}</dt>
+                  <dd className="text-gray-100 font-semibold break-all text-right">
                     {formatValue(col.key, selectedRow[col.key])}
                   </dd>
                 </div>
               ))}
             </dl>
-          </div>
-        </div>
-      )}
-
-      {showSettings && (
-        <div
-          className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => setShowSettings(false)}
-        >
-          <div
-            className="w-full max-w-sm bg-white rounded-xl border border-slate-200 shadow-lg p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <h2 className="text-sm font-semibold">Admin Account Settings</h2>
+            <div className="mt-5 pt-4 border-t border-gray-700 flex justify-between items-center">
               <button
-                onClick={() => setShowSettings(false)}
-                className="text-xs text-slate-500 hover:text-slate-800"
+                onClick={() => handleDeleteSingleRow(selectedRow.id)}
+                className="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/40 px-3.5 py-2 rounded-lg text-xs font-bold transition-colors"
               >
-                Close
+                Delete Record
+              </button>
+              <button
+                onClick={() => setSelectedRow(null)}
+                className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-colors"
+              >
+                Done
               </button>
             </div>
-            <form onSubmit={handleSaveSettings} className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  New Username
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={settingsNewUsername}
-                  onChange={(e) => setSettingsNewUsername(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  New Password (leave blank to keep current)
-                </label>
-                <input
-                  type="password"
-                  value={settingsNewPassword}
-                  onChange={(e) => setSettingsNewPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  Current Password (required)
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={settingsCurrentPassword}
-                  onChange={(e) => setSettingsCurrentPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
-                />
-              </div>
-              {settingsError && <p className="text-xs text-red-600">{settingsError}</p>}
-              {settingsMessage && <p className="text-xs text-emerald-600">{settingsMessage}</p>}
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowSettings(false)}
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={settingsSaving}
-                  className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-                >
-                  {settingsSaving ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
